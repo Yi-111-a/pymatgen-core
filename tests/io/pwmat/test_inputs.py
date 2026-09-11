@@ -136,17 +136,26 @@ class TestHighSymmetryPoint(MatSciTest):
 
 def test_err_msg_on_seekpath_not_installed():
     """Simulate and test error message when seekpath is not installed."""
+    try:
+        with patch.dict("sys.modules", {"seekpath": None}):
+            # As the import error is raised during init of KPathSeek,
+            # have to import it as well (order matters)
+            importlib.reload(pymatgen.symmetry.kpath)
+            importlib.reload(pymatgen.io.pwmat.inputs)
 
-    with patch.dict("sys.modules", {"seekpath": None}):
-        # As the import error is raised during init of KPathSeek,
-        # have to import it as well (order matters)
+            from pymatgen.io.pwmat.inputs import GenKpt
+
+            with pytest.raises(
+                RuntimeError,
+                match="SeeK-path needs to be installed to use the convention of Hinuma et al",
+            ):
+                GenKpt.from_structure(Structure.from_file(f"{TEST_DIR}/atom.config"), dim=2, density=0.01)
+    finally:
+        # The reloads above re-execute the modules while seekpath is shadowed out
+        # of sys.modules, which leaves `get_path = None` inside
+        # pymatgen.symmetry.kpath (its import fallback). Without restoring,
+        # every later test that builds a KPathSeek fails with
+        # "'NoneType' object is not callable". Reload with seekpath importable
+        # again so the session keeps the real modules.
         importlib.reload(pymatgen.symmetry.kpath)
         importlib.reload(pymatgen.io.pwmat.inputs)
-
-        from pymatgen.io.pwmat.inputs import GenKpt
-
-        with pytest.raises(
-            RuntimeError,
-            match="SeeK-path needs to be installed to use the convention of Hinuma et al",
-        ):
-            GenKpt.from_structure(Structure.from_file(f"{TEST_DIR}/atom.config"), dim=2, density=0.01)
