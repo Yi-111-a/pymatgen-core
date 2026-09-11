@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sys
-
 import numpy as np
 import pytest
 from monty.serialization import loadfn
@@ -16,17 +14,34 @@ from pymatgen.util.testing import TEST_FILES_DIR, MatSciTest
 def _seekpath_works() -> bool:
     """Whether seekpath-based kpath generation is usable in this environment.
 
-    Skip on Windows and Python ≥ 3.13: seekpath imports but `get_path`
-    intermittently resolves to `None` at call time on those matrices
-    (`'NoneType' object is not callable`), matching the gate already in
-    `test_kpath_hin.py`. Otherwise probe end-to-end, since merely importing
-    seekpath is not sufficient.
+    A successful `import seekpath` is not sufficient: `KPathSeek` resolves the
+    symmetry dataset through spglib at call time, and can raise
+    `'NoneType' object is not callable` when spglib fails to detect a dataset.
+    So probe end-to-end and skip only when the probe actually fails.
+
+    The probe runs on several crystal systems because a single cubic cell does
+    not exercise the same spglib code paths. Gating on `sys.platform` /
+    `sys.version_info` instead is both too coarse and stale: it skips matrices
+    where seekpath works (e.g. Windows and Python 3.13 with seekpath 2.2.1 /
+    spglib 2.7.0, where all 230 space groups resolve fine).
     """
-    if sys.platform.startswith("win") or not (sys.version_info <= (3, 13)):
-        return False
+    species = ["K", "La", "Ti"]
+    coords = [[0.345, 5, 0.77298], [0.1345, 5.1, 0.77298], [0.7, 0.8, 0.9]]
+    # One lattice per crystal system exercised by the tests below. A single
+    # cubic cell only walks the cubic spglib paths and misses failures that
+    # show up for lower-symmetry cells.
+    lattices = (
+        Lattice([[3.02330573, 1, 0], [0, 7.98503578, 1], [0, 1.2, 8.11367622]]),  # triclinic
+        Lattice.monoclinic(2, 9, 1, 99),
+        Lattice.orthorhombic(2, 9, 1),
+        Lattice.tetragonal(2, 9),
+        Lattice.hexagonal(2, 95),  # rhombohedral
+        Lattice.hexagonal(2, 9),
+        Lattice.cubic(2),
+    )
     try:
-        struct = Structure(Lattice.cubic(3.0), ["Si", "Si"], [[0, 0, 0], [0.5, 0.5, 0.5]])
-        KPathSeek(struct)
+        for lattice in lattices:
+            KPathSeek(Structure(lattice, species, coords)).get_kpoints()
     except Exception:
         return False
     return True
@@ -71,7 +86,7 @@ class TestHighSymmKpath(MatSciTest):
         assert isinstance(kpath.conventional, Structure)
         assert isinstance(kpath.prim_rec, Lattice)
 
-    @pytest.mark.skipif(not _HAS_SEEKPATH, reason="seekpath not usable on this platform/Python")
+    @pytest.mark.skipif(not _HAS_SEEKPATH, reason="seekpath not usable in this environment")
     def test_kpath_hinuma(self):
         struct = self.get_structure("Si")
         with pytest.warns(UserWarning, match="K-path from the Hinuma"):
@@ -79,7 +94,7 @@ class TestHighSymmKpath(MatSciTest):
         assert kpath.path_type == "hinuma"
         assert "kpoints" in kpath.kpath
 
-    @pytest.mark.skipif(not _HAS_SEEKPATH, reason="seekpath not usable on this platform/Python")
+    @pytest.mark.skipif(not _HAS_SEEKPATH, reason="seekpath not usable in this environment")
     def test_kpath_all_combines_three(self):
         """`path_type='all'` populates label_index, equiv_labels, and path_lengths."""
         struct = self.get_structure("Si")
@@ -91,13 +106,13 @@ class TestHighSymmKpath(MatSciTest):
         # length list has one entry per convention
         assert len(kpath.path_lengths) == 3
 
-    @pytest.mark.skipif(not _HAS_SEEKPATH, reason="seekpath not usable on this platform/Python")
+    @pytest.mark.skipif(not _HAS_SEEKPATH, reason="seekpath not usable in this environment")
     def test_kpath_all_rejects_magmoms(self):
         struct = self.get_structure("Si")
         with pytest.raises(ValueError, match="Cannot select 'all' with non-zero magmoms"):
             HighSymmKpath(struct, path_type="all", has_magmoms=True)
 
-    @pytest.mark.skipif(not _HAS_SEEKPATH, reason="seekpath not usable on this platform/Python")
+    @pytest.mark.skipif(not _HAS_SEEKPATH, reason="seekpath not usable in this environment")
     def test_kpath_generation_across_lattices(self):
         triclinic = [1, 2]
         monoclinic = list(range(3, 16))
