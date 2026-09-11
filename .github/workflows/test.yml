@@ -31,7 +31,7 @@ permissions:
 jobs:
   test:
     # Prevent this action from running on forks
-    if: github.repository == 'materialsproject/pymatgen-core'
+    if: github.repository == 'materialsproject/pymatgen-core' || github.repository == 'Yi-111-a/pymatgen-core'
     defaults:
       run:
         shell: bash -leo pipefail {0} # Enable mamba env activation by reading bash profile
