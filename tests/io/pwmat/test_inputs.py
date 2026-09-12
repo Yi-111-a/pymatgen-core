@@ -136,6 +136,13 @@ class TestHighSymmetryPoint(MatSciTest):
 
 def test_err_msg_on_seekpath_not_installed():
     """Simulate and test error message when seekpath is not installed."""
+    # The reloads are load-bearing, not incidental. KPathSeek.__init__ is guarded by
+    # @requires(get_path is not None, ...), and monty's requires() captures that condition
+    # as a bool at decoration time. Once kpath has been imported with seekpath available
+    # the guard is permanently satisfied, so patching kpath.get_path to None afterwards
+    # only changes what kpath.py:941 calls -- it raises TypeError ("'NoneType' object is
+    # not callable"), not the RuntimeError this test asserts. Re-executing the module is
+    # what re-evaluates the guard.
     try:
         with patch.dict("sys.modules", {"seekpath": None}):
             # As the import error is raised during init of KPathSeek,
@@ -159,3 +166,8 @@ def test_err_msg_on_seekpath_not_installed():
         # again so the session keeps the real modules.
         importlib.reload(pymatgen.symmetry.kpath)
         importlib.reload(pymatgen.io.pwmat.inputs)
+
+    # Assert the restore rather than trusting it: this module is the one that poisons the
+    # session if it runs ahead of tests/symmetry, so a silent failure here shows up as an
+    # unrelated failure somewhere else.
+    assert pymatgen.symmetry.kpath.get_path is not None, "kpath.get_path was not restored"
