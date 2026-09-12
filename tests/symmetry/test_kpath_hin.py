@@ -6,46 +6,14 @@ from pytest import approx
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Structure
 from pymatgen.symmetry.kpath import KPathSeek
-from pymatgen.util.testing import MatSciTest
+from pymatgen.util.testing import MatSciTest, seekpath_unusable_reason
 
 seekpath = pytest.importorskip("seekpath", reason="seekpath not installed")
 
+_SEEKPATH_REASON = seekpath_unusable_reason()
 
-def _seekpath_works() -> bool:
-    """Whether seekpath-based kpath generation is usable in this environment.
-
-    Kept in sync with the same helper in `test_kpaths.py`.
-
-    A successful `import seekpath` is not sufficient: `KPathSeek` resolves the
-    symmetry dataset through spglib at call time, and can raise
-    `'NoneType' object is not callable` when spglib fails to detect a dataset.
-    So probe end-to-end and skip only when the probe actually fails. Gating on
-    `sys.platform` / `sys.version_info` would be both too coarse and stale.
-    """
-    species = ["K", "La", "Ti"]
-    coords = [[0.345, 5, 0.77298], [0.1345, 5.1, 0.77298], [0.7, 0.8, 0.9]]
-    # One lattice per crystal system exercised by the tests below. A single
-    # cubic cell only walks the cubic spglib paths and misses failures that
-    # show up for lower-symmetry cells.
-    lattices = (
-        Lattice([[3.02330573, 1, 0], [0, 7.98503578, 1], [0, 1.2, 8.11367622]]),  # triclinic
-        Lattice.monoclinic(2, 9, 1, 99),
-        Lattice.orthorhombic(2, 9, 1),
-        Lattice.tetragonal(2, 9),
-        Lattice.hexagonal(2, 95),  # rhombohedral
-        Lattice.hexagonal(2, 9),
-        Lattice.cubic(2),
-    )
-    try:
-        for lattice in lattices:
-            KPathSeek(Structure(lattice, species, coords)).get_kpoints()
-    except Exception:
-        return False
-    return True
-
-
-if not _seekpath_works():
-    pytest.skip("seekpath not usable in this environment", allow_module_level=True)
+if _SEEKPATH_REASON:
+    pytest.skip(_SEEKPATH_REASON, allow_module_level=True)
 
 
 class TestKPathSeek(MatSciTest):
