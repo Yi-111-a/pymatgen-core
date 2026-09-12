@@ -7,6 +7,7 @@ materials science, etc.
 
 from __future__ import annotations
 
+import functools
 import json
 import pickle  # use pickle over cPickle to get traceback in case of errors
 import string
@@ -207,6 +208,59 @@ class MatSciTest:
         if got_single_object:
             return [o[0] for o in objects_by_protocol]
         return objects_by_protocol
+
+
+@functools.cache
+def seekpath_unusable_reason() -> str | None:
+    """Why seekpath-based k-path generation cannot run in this environment, or None if it can.
+
+    Returns a human-readable reason, suitable for use as a pytest skip reason, or `None` when
+    `KPathSeek` works. Gating on the environment rather than on `sys.platform` /
+    `sys.version_info` matters: those gates had gone stale and were skipping matrices on which
+    seekpath works fine (e.g. Windows and Python 3.13 with seekpath 2.2.1 / spglib 2.7.0, where
+    all 230 space groups resolve).
+
+    A successful `import seekpath` is not sufficient, because `KPathSeek` resolves the symmetry
+    dataset through spglib at call time, so the failure only surfaces on the first
+    `get_kpoints()`. Several crystal systems are probed because a single cubic cell only
+    exercises the cubic spglib code paths.
+
+    Only the two known unavailability signatures below are tolerated. Anything else is a
+    regression in `KPathSeek` itself and is re-raised, so that a genuine breakage fails the
+    suite instead of silently skipping the module.
+    """
+    from pymatgen.core.lattice import Lattice
+    from pymatgen.core.structure import Structure
+    from pymatgen.symmetry.kpath import KPathSeek
+
+    coords = [[0.345, 5, 0.77298], [0.1345, 5.1, 0.77298], [0.7, 0.8, 0.9]]
+    species = ["K", "La", "Ti"]
+    # One lattice per crystal system exercised by the tests that use this.
+    lattices = (
+        Lattice([[3.02330573, 1, 0], [0, 7.98503578, 1], [0, 1.2, 8.11367622]]),  # triclinic
+        Lattice.monoclinic(2, 9, 1, 99),
+        Lattice.orthorhombic(2, 9, 1),
+        Lattice.tetragonal(2, 9),
+        Lattice.hexagonal(2, 95),  # rhombohedral
+        Lattice.hexagonal(2, 9),
+        Lattice.cubic(2),
+    )
+
+    try:
+        for lattice in lattices:
+            KPathSeek(Structure(lattice, species, coords)).get_kpoints()
+    except (RuntimeError, TypeError) as exc:
+        # seekpath missing: raised by the @requires guard on KPathSeek.__init__
+        missing = isinstance(exc, RuntimeError) and "SeeK-path needs to be installed" in str(exc)
+        # spglib returned no dataset, so kpath.get_path was left as None
+        no_dataset = isinstance(exc, TypeError) and "'NoneType' object is not callable" in str(exc)
+
+        if not (missing or no_dataset):
+            raise
+
+        return f"seekpath unusable in this environment: {type(exc).__name__}: {exc}"
+
+    return None
 
 
 @deprecated(MatSciTest, deadline=(2026, 1, 1))
