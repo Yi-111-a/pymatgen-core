@@ -7,6 +7,7 @@ import os
 import re
 import warnings
 from fractions import Fraction
+from importlib.util import find_spec
 from pathlib import Path
 from shutil import which
 from unittest import mock
@@ -48,6 +49,13 @@ except ImportError:
 
 ENUM_CMD = which("enum.x") or which("multienum.x")
 MCSQS_CMD = which("mcsqs")
+
+# moyopy is an optional dependency: decide once at collection time so the legs
+# without it skip the whole sweep rather than re-checking the import 230 times
+_HAS_MOYOPY = find_spec("moyopy") is not None
+_skip_no_moyopy = pytest.mark.skipif(
+    not _HAS_MOYOPY, reason="moyopy not installed (install with pip install pymatgen[symmetry])"
+)
 
 
 class TestNeighbor:
@@ -1035,6 +1043,7 @@ Direct
         with pytest.raises(ValueError, match="Invalid backend='42'"):
             self.struct.get_symmetry_dataset(backend="42")
 
+    @_skip_no_moyopy
     @pytest.mark.parametrize("sg", range(1, 231))
     def test_symmetry_dataset_backends_agree_on_semantics(self, sg):
         """The moyopy and spglib backends must agree on symmetry semantics.
@@ -1051,8 +1060,6 @@ Direct
         backend's own origin-choice convention for the standardized cell,
         which also selects a different hall setting for 24 groups).
         """
-        pytest.importorskip("moyopy")
-
         if sg in (1, 2):
             lattice = Lattice([[3.02330573, 1, 0], [0, 7.98503578, 1], [0, 1.2, 8.11367622]])
         elif sg < 16:
