@@ -143,6 +143,12 @@ def test_err_msg_on_seekpath_not_installed():
     # only changes what kpath.py:941 calls -- it raises TypeError ("'NoneType' object is
     # not callable"), not the RuntimeError this test asserts. Re-executing the module is
     # what re-evaluates the guard.
+    # Capture before mutating anything. On CI legs that do not install the
+    # `optional` extra, seekpath is absent and kpath.get_path is legitimately
+    # None both before and after -- so the restore check below must compare
+    # against this captured value (`None is None` still verifies it), not
+    # against `is not None`, which would only hold where seekpath is installed.
+    get_path_before = pymatgen.symmetry.kpath.get_path
     try:
         with patch.dict("sys.modules", {"seekpath": None}):
             # As the import error is raised during init of KPathSeek,
@@ -169,5 +175,6 @@ def test_err_msg_on_seekpath_not_installed():
 
     # Assert the restore rather than trusting it: this module is the one that poisons the
     # session if it runs ahead of tests/symmetry, so a silent failure here shows up as an
-    # unrelated failure somewhere else.
-    assert pymatgen.symmetry.kpath.get_path is not None, "kpath.get_path was not restored"
+    # unrelated failure somewhere else. Identity with the pre-reload value -- on legs
+    # without seekpath this is `None is None`, and that is the correct thing to verify.
+    assert pymatgen.symmetry.kpath.get_path is get_path_before, "kpath.get_path was not restored"
