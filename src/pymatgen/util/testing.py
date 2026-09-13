@@ -241,7 +241,7 @@ def seekpath_unusable_reason() -> str | None:
         Lattice.monoclinic(2, 9, 1, 99),
         Lattice.orthorhombic(2, 9, 1),
         Lattice.tetragonal(2, 9),
-        Lattice.hexagonal(2, 95),  # rhombohedral
+        Lattice.hexagonal(2, 95),  # trigonal (hexagonal axes)
         Lattice.hexagonal(2, 9),
         Lattice.cubic(2),
     )
