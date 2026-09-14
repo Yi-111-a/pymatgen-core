@@ -215,15 +215,19 @@ def seekpath_unusable_reason() -> str | None:
     """Why seekpath-based k-path generation cannot run in this environment, or None if it can.
 
     Returns a human-readable reason, suitable for use as a pytest skip reason, or `None` when
-    `KPathSeek` works. Gating on the environment rather than on `sys.platform` /
+    `KPathSeek` is callable. Gating on the environment rather than on `sys.platform` /
     `sys.version_info` matters: those gates had gone stale and were skipping matrices on which
     seekpath works fine (e.g. Windows and Python 3.13 with seekpath 2.2.1 / spglib 2.7.0, where
     all 230 space groups resolve).
 
     A successful `import seekpath` is not sufficient, because `KPathSeek` resolves the symmetry
     dataset through spglib at call time, so the failure only surfaces on the first
-    `get_kpoints()`. Several crystal systems are probed because a single cubic cell only
-    exercises the cubic spglib code paths.
+    `get_kpoints()`. A single cubic cell is enough to establish that: the probe does not claim
+    to exercise every Bravais path (that coverage belongs in the seekpath test modules).
+
+    The result is cached for the process. Callers at module-collection time (e.g.
+    `test_kpath_hin` / `test_kpaths`) deliberately populate the cache before any test can
+    poison `kpath.get_path`, so a later simulated absence does not flip the skip decision.
 
     Only the two known unavailability signatures below are tolerated. Anything else is a
     regression in `KPathSeek` itself and is re-raised, so that a genuine breakage fails the
@@ -233,22 +237,15 @@ def seekpath_unusable_reason() -> str | None:
     from pymatgen.core.structure import Structure
     from pymatgen.symmetry.kpath import KPathSeek
 
-    coords = [[0.345, 5, 0.77298], [0.1345, 5.1, 0.77298], [0.7, 0.8, 0.9]]
-    species = ["K", "La", "Ti"]
-    # One lattice per crystal system exercised by the tests that use this.
-    lattices = (
-        Lattice([[3.02330573, 1, 0], [0, 7.98503578, 1], [0, 1.2, 8.11367622]]),  # triclinic
-        Lattice.monoclinic(2, 9, 1, 99),
-        Lattice.orthorhombic(2, 9, 1),
-        Lattice.tetragonal(2, 9),
-        Lattice.hexagonal(2, 95),  # trigonal (hexagonal axes)
-        Lattice.hexagonal(2, 9),
+    # Minimal probe cell: three general-position sites → P1; only checks that KPathSeek runs.
+    struct = Structure(
         Lattice.cubic(2),
+        ["K", "La", "Ti"],
+        [[0.345, 5, 0.77298], [0.1345, 5.1, 0.77298], [0.7, 0.8, 0.9]],
     )
 
     try:
-        for lattice in lattices:
-            KPathSeek(Structure(lattice, species, coords)).get_kpoints()
+        KPathSeek(struct).get_kpoints()
     except (RuntimeError, TypeError) as exc:
         # seekpath missing: raised by the @requires guard on KPathSeek.__init__
         missing = isinstance(exc, RuntimeError) and "SeeK-path needs to be installed" in str(exc)
