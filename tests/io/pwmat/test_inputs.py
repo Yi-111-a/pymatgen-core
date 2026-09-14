@@ -136,23 +136,14 @@ class TestHighSymmetryPoint(MatSciTest):
 
 def test_err_msg_on_seekpath_not_installed():
     """Simulate and test error message when seekpath is not installed."""
-    # The reloads are load-bearing, not incidental. KPathSeek.__init__ is guarded by
-    # @requires(get_path is not None, ...), and monty's requires() captures that condition
-    # as a bool at decoration time. Once kpath has been imported with seekpath available
-    # the guard is permanently satisfied, so patching kpath.get_path to None afterwards
-    # only changes what kpath.py:941 calls -- it raises TypeError ("'NoneType' object is
-    # not callable"), not the RuntimeError this test asserts. Re-executing the module is
-    # what re-evaluates the guard.
-    # Capture before mutating anything. On CI legs that do not install the
-    # `optional` extra, seekpath is absent and kpath.get_path is legitimately
-    # None both before and after -- so the restore check below must compare
-    # against this captured value (`None is None` still verifies it), not
-    # against `is not None`, which would only hold where seekpath is installed.
+    # monty's @requires captures `get_path is not None` as a bool at decoration time, so
+    # patching get_path afterwards cannot reproduce the RuntimeError — re-executing the
+    # module (with seekpath shadowed) is required. Capture get_path first: on legs without
+    # the optional extra it is already None, and the restore assert must allow that.
     get_path_before = pymatgen.symmetry.kpath.get_path
     try:
         with patch.dict("sys.modules", {"seekpath": None}):
-            # As the import error is raised during init of KPathSeek,
-            # have to import it as well (order matters)
+            # Reload order matters: kpath's ImportError fallback runs during reload.
             importlib.reload(pymatgen.symmetry.kpath)
             importlib.reload(pymatgen.io.pwmat.inputs)
 
@@ -164,17 +155,8 @@ def test_err_msg_on_seekpath_not_installed():
             ):
                 GenKpt.from_structure(Structure.from_file(f"{TEST_DIR}/atom.config"), dim=2, density=0.01)
     finally:
-        # The reloads above re-execute the modules while seekpath is shadowed out
-        # of sys.modules, which leaves `get_path = None` inside
-        # pymatgen.symmetry.kpath (its import fallback). Without restoring,
-        # every later test that builds a KPathSeek fails with
-        # "'NoneType' object is not callable". Reload with seekpath importable
-        # again so the session keeps the real modules.
+        # Undo the poisoned module namespace left by the shadowed reload.
         importlib.reload(pymatgen.symmetry.kpath)
         importlib.reload(pymatgen.io.pwmat.inputs)
 
-    # Assert the restore rather than trusting it: this module is the one that poisons the
-    # session if it runs ahead of tests/symmetry, so a silent failure here shows up as an
-    # unrelated failure somewhere else. Identity with the pre-reload value -- on legs
-    # without seekpath this is `None is None`, and that is the correct thing to verify.
     assert pymatgen.symmetry.kpath.get_path is get_path_before, "kpath.get_path was not restored"

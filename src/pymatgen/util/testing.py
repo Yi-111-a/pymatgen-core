@@ -7,7 +7,6 @@ materials science, etc.
 
 from __future__ import annotations
 
-import functools
 import json
 import pickle  # use pickle over cPickle to get traceback in case of errors
 import string
@@ -210,51 +209,42 @@ class MatSciTest:
         return objects_by_protocol
 
 
-@functools.cache
 def seekpath_unusable_reason() -> str | None:
     """Why seekpath-based k-path generation cannot run in this environment, or None if it can.
 
     Returns a human-readable reason, suitable for use as a pytest skip reason, or `None` when
     `KPathSeek` is callable. Gating on the environment rather than on `sys.platform` /
     `sys.version_info` matters: those gates had gone stale and were skipping matrices on which
-    seekpath works fine (e.g. Windows and Python 3.13 with seekpath 2.2.1 / spglib 2.7.0, where
-    all 230 space groups resolve).
+    seekpath works fine (e.g. Windows and Python 3.13 with seekpath 2.2.1 / spglib 2.7.0).
 
-    A successful `import seekpath` is not sufficient, because `KPathSeek` resolves the symmetry
-    dataset through spglib at call time, so the failure only surfaces on the first
-    `get_kpoints()`. A single cubic cell is enough to establish that: the probe does not claim
-    to exercise every Bravais path (that coverage belongs in the seekpath test modules).
+    A successful `import seekpath` is not sufficient — `KPathSeek` resolves the symmetry
+    dataset through spglib at call time — so this probes with a single cubic P1 cell
+    (three general-position sites). That only establishes that `KPathSeek` is callable;
+    Bravais-path coverage belongs in the seekpath test modules.
 
-    The result is cached for the process. Callers at module-collection time (e.g.
-    `test_kpath_hin` / `test_kpaths`) deliberately populate the cache before any test can
-    poison `kpath.get_path`, so a later simulated absence does not flip the skip decision.
-
-    Only the two known unavailability signatures below are tolerated. Anything else is a
-    regression in `KPathSeek` itself and is re-raised, so that a genuine breakage fails the
-    suite instead of silently skipping the module.
+    Known unavailability leaves `kpath.get_path is None` (import fallback or `@requires`
+    guard). Those cases return a skip reason; any other exception is re-raised so a real
+    `KPathSeek` regression fails the suite instead of silently skipping.
     """
     from pymatgen.core.lattice import Lattice
     from pymatgen.core.structure import Structure
+    from pymatgen.symmetry import kpath as kpath_mod
     from pymatgen.symmetry.kpath import KPathSeek
 
-    # Minimal probe cell: three general-position sites → P1; only checks that KPathSeek runs.
+    # Minimal probe: three general-position sites → P1; in-cell fractional coords.
     struct = Structure(
         Lattice.cubic(2),
         ["K", "La", "Ti"],
-        [[0.345, 5, 0.77298], [0.1345, 5.1, 0.77298], [0.7, 0.8, 0.9]],
+        [[0.345, 0.0, 0.77298], [0.1345, 0.1, 0.77298], [0.7, 0.8, 0.9]],
+        to_unit_cell=True,
     )
 
     try:
         KPathSeek(struct).get_kpoints()
     except (RuntimeError, TypeError) as exc:
-        # seekpath missing: raised by the @requires guard on KPathSeek.__init__
-        missing = isinstance(exc, RuntimeError) and "SeeK-path needs to be installed" in str(exc)
-        # spglib returned no dataset, so kpath.get_path was left as None
-        no_dataset = isinstance(exc, TypeError) and "'NoneType' object is not callable" in str(exc)
-
-        if not (missing or no_dataset):
+        # Avoid string-matching monty/CPython messages; both known paths leave get_path None.
+        if kpath_mod.get_path is not None:
             raise
-
         return f"seekpath unusable in this environment: {type(exc).__name__}: {exc}"
 
     return None
