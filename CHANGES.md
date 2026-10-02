@@ -1,6 +1,12 @@
 
 # Changelog
 
+## v2026.10.2
+
+- PR #151 `Structure.get_all_neighbors_old` gains a `numerical_tol` argument (default `1e-8`) and filters on `numerical_tol < d <= r + numerical_tol`, matching `get_all_neighbors`, `get_all_neighbors_py`, `get_neighbor_list` and `get_neighbors`. Previously neighbors lying exactly at the cutoff were kept or dropped depending on floating-point rounding (e.g. cubic SrTiO3 at `r = a` returned only 3 of the 6 Ti images, not even inversion-symmetric). Fixes materialsproject/pymatgen#4708. (by @shyuep)
+- PR #157 `GrainBoundaryGenerator` fixes three traps. Triclinic structures were mapped to `"t"` and silently treated as tetragonal; the lattice type is now mapped explicitly, and triclinic and monoclinic structures raise a `ValueError` at construction. The `Sigma >1000` `RuntimeError` from `get_trans_mat`, usually caused by an angle not given to full precision (e.g. 109.47° for Σ3 [110] in Si), now reports the computed sigma, angle and axis and points to `get_rotation_angle_from_sigma` / `enum_sigma_*` for the exact angle. `get_rotation_angle_from_sigma`'s fallback warning for an impossible sigma now names the requested and returned sigma; behavior is unchanged. (by @shyuep)
+- PR #152 Fix the `pyright` CI step taking 80–100 min: with numpy 2.5 stubs, loop type inference for the metric tensor in `Lattice.get_niggli_reduced_lattice` effectively never terminated. Declaring `G: np.ndarray` brings `pyright src` to ~27 s; the lint job is also capped at 15 min. No runtime change. (by @shyuep)
+
 ## v2026.9.23
 
 - PR #144 `Lattice.find_mapping` prefers a proper rotation (`det R > 0`) over a reflection when both exist. The first length/angle match from `find_all_mappings` was sometimes improper even on a self-map (8 proper + 8 improper maps on the materialsproject/pymatgen#4457 cell). An improper map is still returned when no proper map exists (true enantiomorphs); `find_all_mappings` is unchanged. (by @shaneraphel)
