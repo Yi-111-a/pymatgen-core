@@ -4343,17 +4343,17 @@ class Structure(IStructure, MutableSequence[PeriodicSite]):
 
         return self
 
-    def remove_sites(self, indices: Sequence[SupportsIndex | None]) -> Self:
-        """Delete sites with at indices.
+    def remove_sites(self, indices: Iterable[SupportsIndex | None]) -> Self:
+        """Remove sites at the given indices.
 
         Args:
-            indices: Sequence of indices of sites to delete.
+            indices: Iterable of indices. Ignores None and negative values.
 
         Returns:
-            Structure: self with sites removed.
+            Structure: self with relevant sites removed.
         """
-        self.sites = [site for idx, site in enumerate(self) if idx not in indices]
-
+        remove = {v.__index__() for v in indices if v is not None}
+        self._sites = [site for idx, site in enumerate(self._sites) if idx not in remove]
         return self
 
     def apply_operation(self, symm_op: SymmOp, fractional: bool = False) -> Self:
