@@ -700,6 +700,31 @@ class TestComposition(MatSciTest):
         with pytest.raises(ValueError, match="Composition V2 O3 cannot accommodate max_sites setting"):
             Composition("V2O3").oxi_state_guesses(max_sites=1)
 
+    def test_oxi_state_guesses_target_charge_survives_max_sites_reduction(self):
+        # https://github.com/materialsproject/pymatgen-core/issues/153
+        # Oxidation states are per site, so reducing the composition for speed must not change the
+        # charge the guess balances: target_charge totals the composition that was asked about.
+        for formula, target_charge, override, positive_max_sites, expected in (
+            ("Fe2O4", -2, None, 3, {"Fe": 3, "O": -2}),
+            ("V2O6", -2, {"V": [2, 3, 4, 5]}, 4, {"V": 5, "O": -2}),
+        ):
+            comp = Composition(formula)
+            unreduced = comp.oxi_state_guesses(target_charge=target_charge, oxi_states_override=override)
+            assert unreduced[0] == expected
+
+            # -1 reduces fully; the positive value reduces because the composition is larger than it
+            for max_sites in (-1, positive_max_sites):
+                guesses = comp.oxi_state_guesses(
+                    max_sites=max_sites,
+                    target_charge=target_charge,
+                    oxi_states_override=override,
+                )
+                assert guesses == unreduced
+                assert sum(comp[element] * state for element, state in guesses[0].items()) == target_charge
+
+        # a target_charge the reduction factor cannot divide has no solution rather than a wrong one
+        assert Composition("Fe2O4").oxi_state_guesses(max_sites=-1, target_charge=-1) == ()
+
     def test_oxi_state_decoration(self):
         # Basic test: Get compositions where each element is in a single charge state
         decorated = Composition("H2O").add_charges_from_oxi_state_guesses()

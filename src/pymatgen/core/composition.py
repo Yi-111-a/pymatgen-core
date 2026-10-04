@@ -1082,6 +1082,10 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
             if comp.num_atoms > max_sites:
                 raise ValueError(f"Composition {comp} cannot accommodate max_sites setting!")
 
+        # Oxidation states are per site, so the charge balance condition only holds for the
+        # original composition if the target is stated on the composition searched here.
+        target_charge /= self.num_atoms / comp.num_atoms
+
         # Load prior probabilities of oxidation states, used to rank solutions
         if type(self).oxi_prob is None:
             all_data = loadfn(f"{MODULE_DIR}/icsd_bv.yaml")
