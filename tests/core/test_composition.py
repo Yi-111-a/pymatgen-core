@@ -725,6 +725,23 @@ class TestComposition(MatSciTest):
         # a target_charge the reduction factor cannot divide has no solution rather than a wrong one
         assert Composition("Fe2O4").oxi_state_guesses(max_sites=-1, target_charge=-1) == ()
 
+    def test_oxi_state_guesses_target_charge_exact_under_inexact_reduction_ratio(self):
+        # A positive max_sites searches `reduced_comp * max(1, int(max_sites / reduced_atoms))`,
+        # so the scaling ratio is reduced_factor / k and is generally not a power of two.
+        # Dividing by it in floating point can leave an integer-valued target a few ULP off,
+        # and the balance comparison is an exact `==`, which silently dropped valid solutions.
+        # Fe27O36 reduces by 9 to Fe3O4; max_sites=49 searches Fe21O28, a 63/49 = 9/7 ratio,
+        # so target_charge=-9 scales to exactly -7. Only this one k failed: 7 * -7/9 == -9.
+        comp = Composition("Fe27O36")
+        unreduced = comp.oxi_state_guesses(target_charge=-9)
+        assert unreduced != ()
+
+        for max_sites in (7, 14, 21, 28, 35, 42, 49, 56, 63):
+            assert comp.oxi_state_guesses(max_sites=max_sites, target_charge=-9) == unreduced
+
+        # and the answer really does balance the composition that was asked about
+        assert sum(comp[el] * state for el, state in unreduced[0].items()) == pytest.approx(-9)
+
     def test_oxi_state_decoration(self):
         # Basic test: Get compositions where each element is in a single charge state
         decorated = Composition("H2O").add_charges_from_oxi_state_guesses()

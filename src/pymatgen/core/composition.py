@@ -12,6 +12,7 @@ import re
 import string
 import warnings
 from collections import defaultdict
+from fractions import Fraction
 from functools import cached_property, lru_cache, total_ordering
 from itertools import combinations_with_replacement, product
 from typing import TYPE_CHECKING
@@ -1084,7 +1085,17 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
 
         # Oxidation states are per site, so the charge balance condition only holds for the
         # original composition if the target is stated on the composition searched here.
-        target_charge /= self.num_atoms / comp.num_atoms
+        # Scale by exact rational arithmetic: the site counts are integral, so dividing by
+        # the float ratio self.num_atoms / comp.num_atoms can leave an integer-valued
+        # target a few ULP off (e.g. 63/49 is inexact), and the balance comparison below
+        # is an exact `==` that would then reject a genuinely valid solution.
+        scaled_target_charge = Fraction(comp.num_atoms) * Fraction(target_charge) / Fraction(self.num_atoms)
+        # A solution can only balance an integral sum of integral oxidation sums, so snap
+        # back to the exact integer whenever the scaled value is an integer to within
+        # rounding error. Non-integral values are left alone: they have no solution anyway.
+        nearest_int = round(scaled_target_charge)
+        if abs(scaled_target_charge - nearest_int) < 1e-9 * max(1, abs(nearest_int)):
+            scaled_target_charge = Fraction(nearest_int)
 
         # Load prior probabilities of oxidation states, used to rank solutions
         if type(self).oxi_prob is None:
@@ -1137,7 +1148,7 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
         all_scores = []  # will contain a score for each solution
         for x in product(*el_sums):
             # Each x is a trial of one possible oxidation sum for each element
-            if sum(x) == target_charge:  # charge balance condition
+            if sum(x) == scaled_target_charge:  # charge balance condition
                 el_sum_sol = dict(zip(elements, x, strict=True))  # element->oxid_sum
                 # Normalize oxid_sum by amount to get avg oxid state
                 sol = {el: v / el_amt[el] for el, v in el_sum_sol.items()}
