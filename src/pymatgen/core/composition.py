@@ -1100,13 +1100,12 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
         nearest_int = round(scaled_target_charge)
         if abs(scaled_target_charge - nearest_int) < 1e-9 * max(1, abs(nearest_int)):
             scaled_target_charge = Fraction(nearest_int)
-        elif scaled_target_charge.denominator != 1:
-            if comp != self:
-                comp = self.copy()
-                scaled_target_charge = Fraction(target_charge)
-                nearest_int = round(scaled_target_charge)
-                if abs(scaled_target_charge - nearest_int) < 1e-9 * max(1, abs(nearest_int)):
-                    scaled_target_charge = Fraction(nearest_int)
+        elif scaled_target_charge.denominator != 1 and comp != self:
+            comp = self.copy()
+            scaled_target_charge = Fraction(target_charge)
+            nearest_int = round(scaled_target_charge)
+            if abs(scaled_target_charge - nearest_int) < 1e-9 * max(1, abs(nearest_int)):
+                scaled_target_charge = Fraction(nearest_int)
 
         # Load prior probabilities of oxidation states, used to rank solutions
         if type(self).oxi_prob is None:
