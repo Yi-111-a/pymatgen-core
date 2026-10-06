@@ -1090,12 +1090,23 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
         # target a few ULP off (e.g. 63/49 is inexact), and the balance comparison below
         # is an exact `==` that would then reject a genuinely valid solution.
         scaled_target_charge = Fraction(comp.num_atoms) * Fraction(target_charge) / Fraction(self.num_atoms)
-        # A solution can only balance an integral sum of integral oxidation sums, so snap
-        # back to the exact integer whenever the scaled value is an integer to within
-        # rounding error. Non-integral values are left alone: they have no solution anyway.
+        # Snap to the nearest integer when within rounding error. The 1e-9 tolerance
+        # only matters for float target_charge values; an integer target is already
+        # exact under Fraction arithmetic. Oxidation-state sums are integers, so a
+        # genuinely non-integral scaled target cannot balance on the reduced
+        # composition — fall back to the unreduced composition so max_sites stays
+        # a pure accelerator rather than changing the answer (e.g. Fe2O4 with
+        # target_charge=-1 reduces to FeO2 with scaled target -0.5).
         nearest_int = round(scaled_target_charge)
         if abs(scaled_target_charge - nearest_int) < 1e-9 * max(1, abs(nearest_int)):
             scaled_target_charge = Fraction(nearest_int)
+        elif scaled_target_charge.denominator != 1:
+            if comp != self:
+                comp = self.copy()
+                scaled_target_charge = Fraction(target_charge)
+                nearest_int = round(scaled_target_charge)
+                if abs(scaled_target_charge - nearest_int) < 1e-9 * max(1, abs(nearest_int)):
+                    scaled_target_charge = Fraction(nearest_int)
 
         # Load prior probabilities of oxidation states, used to rank solutions
         if type(self).oxi_prob is None:

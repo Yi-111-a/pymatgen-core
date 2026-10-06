@@ -722,8 +722,18 @@ class TestComposition(MatSciTest):
                 assert guesses == unreduced
                 assert sum(comp[element] * state for element, state in guesses[0].items()) == target_charge
 
-        # a target_charge the reduction factor cannot divide has no solution rather than a wrong one
-        assert Composition("Fe2O4").oxi_state_guesses(max_sites=-1, target_charge=-1) == ()
+        # Non-integral scaled target: fall back to the unreduced composition so max_sites
+        # does not change the answer. Fe2O4 with target_charge=-1 can balance unreduced
+        # when Fe^{3+}/Fe^{4+} are allowed (average 3.5 → Fe sum 7, O sum -8); reduced
+        # FeO2 would scale the target to -0.5 and wrongly return () without the fall-back.
+        fe2o4 = Composition("Fe2O4")
+        override = {"Fe": [2, 3, 4], "O": [-2]}
+        unreduced_odd = fe2o4.oxi_state_guesses(target_charge=-1, oxi_states_override=override)
+        assert unreduced_odd != ()
+        assert unreduced_odd[0]["Fe"] == 3.5
+        assert fe2o4.oxi_state_guesses(
+            max_sites=-1, target_charge=-1, oxi_states_override=override
+        ) == unreduced_odd
 
     def test_oxi_state_guesses_target_charge_exact_under_inexact_reduction_ratio(self):
         # A positive max_sites searches `reduced_comp * max(1, int(max_sites / reduced_atoms))`,
@@ -741,6 +751,22 @@ class TestComposition(MatSciTest):
 
         # and the answer really does balance the composition that was asked about
         assert sum(comp[el] * state for el, state in unreduced[0].items()) == pytest.approx(-9)
+
+    def test_oxi_state_guesses_float_override_and_float_target(self):
+        # Float entries in oxi_states_override produce float oxid_sums; equality against
+        # scaled_target_charge must still find the intended balance when exact.
+        guesses = Composition("Fe2O3").oxi_state_guesses(
+            oxi_states_override={"Fe": [2.5, 3.0], "O": [-2.0]},
+        )
+        assert guesses != ()
+        assert guesses[0]["Fe"] == pytest.approx(3.0) or guesses[0]["Fe"] == pytest.approx(2.5)
+
+        # A float target_charge that scales to a near-integer under reduction still snaps.
+        # Fe2O4 reduced by 2; target -2.0000000001 should land near -1 on FeO2 and snap.
+        comp = Composition("Fe2O4")
+        near = comp.oxi_state_guesses(max_sites=-1, target_charge=-2.0000000001)
+        exact = comp.oxi_state_guesses(max_sites=-1, target_charge=-2)
+        assert near == exact
 
     def test_oxi_state_decoration(self):
         # Basic test: Get compositions where each element is in a single charge state
