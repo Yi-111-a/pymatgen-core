@@ -731,9 +731,7 @@ class TestComposition(MatSciTest):
         unreduced_odd = fe2o4.oxi_state_guesses(target_charge=-1, oxi_states_override=override)
         assert unreduced_odd != ()
         assert unreduced_odd[0]["Fe"] == 3.5
-        assert fe2o4.oxi_state_guesses(
-            max_sites=-1, target_charge=-1, oxi_states_override=override
-        ) == unreduced_odd
+        assert fe2o4.oxi_state_guesses(max_sites=-1, target_charge=-1, oxi_states_override=override) == unreduced_odd
 
     def test_oxi_state_guesses_target_charge_exact_under_inexact_reduction_ratio(self):
         # A positive max_sites searches `reduced_comp * max(1, int(max_sites / reduced_atoms))`,
@@ -758,8 +756,14 @@ class TestComposition(MatSciTest):
         guesses = Composition("Fe2O3").oxi_state_guesses(
             oxi_states_override={"Fe": [2.5, 3.0], "O": [-2.0]},
         )
-        assert guesses != ()
-        assert guesses[0]["Fe"] == pytest.approx(3.0) or guesses[0]["Fe"] == pytest.approx(2.5)
+        # Two Fe can only sum to 6.0 (3.0 + 3.0) to balance three O at -2.0.
+        assert guesses[0] == {"Fe": 3.0, "O": -2.0}
+        # With target_charge=-1 the Fe sum must be 5.0 (2.5 + 2.5).
+        charged = Composition("Fe2O3").oxi_state_guesses(
+            oxi_states_override={"Fe": [2.5, 3.0], "O": [-2.0]},
+            target_charge=-1,
+        )
+        assert charged[0] == {"Fe": 2.5, "O": -2.0}
 
         # A float target_charge that scales to a near-integer under reduction still snaps.
         # Fe2O4 reduced by 2; target -2.0000000001 should land near -1 on FeO2 and snap.

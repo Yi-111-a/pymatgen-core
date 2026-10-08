@@ -903,7 +903,10 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
                 will be raised. Set to -1 to just reduce fully. If set to a
                 number less than -1, the formula will be fully reduced but a
                 ValueError will be thrown if the number of atoms in the reduced
-                formula is greater than abs(max_sites).
+                formula is greater than abs(max_sites). target_charge always
+                refers to this composition. If it does not scale to an integer
+                charge on the reduced composition, the unreduced composition is
+                searched instead, so max_sites gives no speed-up in that case.
 
         Returns:
             list[dict]: each dict reports an element symbol and average
@@ -998,7 +1001,10 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
                 will be raised. Set to -1 to just reduce fully. If set to a
                 number less than -1, the formula will be fully reduced but a
                 ValueError will be thrown if the number of atoms in the reduced
-                formula is greater than abs(max_sites).
+                formula is greater than abs(max_sites). target_charge always
+                refers to this composition. If it does not scale to an integer
+                charge on the reduced composition, the unreduced composition is
+                searched instead, so max_sites gives no speed-up in that case.
 
         Returns:
             Composition, where the elements are assigned oxidation states based
@@ -1059,7 +1065,10 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
                 will be raised. Set to -1 to just reduce fully. If set to a
                 number less than -1, the formula will be fully reduced but a
                 ValueError will be thrown if the number of atoms in the reduced
-                formula is greater than abs(max_sites).
+                formula is greater than abs(max_sites). target_charge always
+                refers to this composition. If it does not scale to an integer
+                charge on the reduced composition, the unreduced composition is
+                searched instead, so max_sites gives no speed-up in that case.
 
         Returns:
             list[dict]: Each dict maps the element symbol to a list of

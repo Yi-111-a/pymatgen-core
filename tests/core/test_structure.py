@@ -1521,13 +1521,9 @@ class TestStructure(MatSciTest):
         ]
         struct = Structure(lattice, species, coords)
         override = {"Fe": [2, 3, 4], "O": [-2]}
-        unreduced = struct.composition.oxi_state_guesses(
-            target_charge=-1, oxi_states_override=override
-        )
+        unreduced = struct.composition.oxi_state_guesses(target_charge=-1, oxi_states_override=override)
         assert unreduced != ()
-        struct.add_oxidation_state_by_guess(
-            max_sites=-1, target_charge=-1, oxi_states_override=override
-        )
+        struct.add_oxidation_state_by_guess(max_sites=-1, target_charge=-1, oxi_states_override=override)
         total = sum(float(site.specie.oxi_state) for site in struct)
         assert total == pytest.approx(-1)
 
