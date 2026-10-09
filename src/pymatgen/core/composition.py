@@ -12,7 +12,6 @@ import re
 import string
 import warnings
 from collections import defaultdict
-from fractions import Fraction
 from functools import cached_property, lru_cache, total_ordering
 from itertools import combinations_with_replacement, product
 from typing import TYPE_CHECKING
@@ -81,18 +80,6 @@ def _parse_formula_cached(formula: str, strict: bool = True) -> tuple[tuple[str,
         formula = formula.replace(match.group(), expanded_sym, 1)
         match = _FORMULA_PAREN_RE.search(formula)
     return tuple(get_sym_dict(formula, 1).items())
-
-
-def _snap_to_integer(value: Fraction) -> Fraction:
-    """Snap a charge to the nearest integer when it is within rounding error of it.
-
-    The 1e-9 relative tolerance only matters for float target charges; an integer
-    target is already exact under Fraction arithmetic.
-    """
-    nearest_int = round(value)
-    if abs(value - nearest_int) < 1e-9 * max(1, abs(nearest_int)):
-        return Fraction(nearest_int)
-    return value
 
 
 @total_ordering
@@ -918,11 +905,8 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
                 formula is greater than abs(max_sites). target_charge always
                 refers to this composition. If it does not scale to an integer
                 charge on the reduced composition, the unreduced composition is
-                searched instead and a warning is emitted, so max_sites gives no
-                speed-up in that case; for max_sites < -1 the size limit is then
-                checked against the unreduced composition. A float target_charge
-                that scales to within 1e-9 (relative) of an integer is treated as
-                that integer.
+                searched instead, with a warning, and for max_sites < -1 the
+                size limit is checked against the unreduced composition.
 
         Returns:
             list[dict]: each dict reports an element symbol and average
@@ -1020,11 +1004,8 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
                 formula is greater than abs(max_sites). target_charge always
                 refers to this composition. If it does not scale to an integer
                 charge on the reduced composition, the unreduced composition is
-                searched instead and a warning is emitted, so max_sites gives no
-                speed-up in that case; for max_sites < -1 the size limit is then
-                checked against the unreduced composition. A float target_charge
-                that scales to within 1e-9 (relative) of an integer is treated as
-                that integer.
+                searched instead, with a warning, and for max_sites < -1 the
+                size limit is checked against the unreduced composition.
 
         Returns:
             Composition, where the elements are assigned oxidation states based
@@ -1088,11 +1069,8 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
                 formula is greater than abs(max_sites). target_charge always
                 refers to this composition. If it does not scale to an integer
                 charge on the reduced composition, the unreduced composition is
-                searched instead and a warning is emitted, so max_sites gives no
-                speed-up in that case; for max_sites < -1 the size limit is then
-                checked against the unreduced composition. A float target_charge
-                that scales to within 1e-9 (relative) of an integer is treated as
-                that integer.
+                searched instead, with a warning, and for max_sites < -1 the
+                size limit is checked against the unreduced composition.
 
         Returns:
             list[dict]: Each dict maps the element symbol to a list of
@@ -1116,20 +1094,11 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
             if comp.num_atoms > max_sites:
                 raise ValueError(f"Composition {comp} cannot accommodate max_sites setting!")
 
-        # Oxidation states are per site, so the charge balance condition only holds for the
-        # original composition if the target is stated on the composition searched here.
-        # Scale by exact rational arithmetic: the site counts are integral, so dividing by
-        # the float ratio self.num_atoms / comp.num_atoms can leave an integer-valued
-        # target a few ULP off (e.g. 63/49 is inexact), and the balance comparison below
-        # is an exact `==` that would then reject a genuinely valid solution.
-        scaled_target_charge = Fraction(comp.num_atoms) * Fraction(target_charge) / Fraction(self.num_atoms)
-        # Oxidation-state sums are integers, so a genuinely non-integral scaled target
-        # cannot balance on the reduced composition. Fall back to the unreduced
-        # composition rather than changing the answer (e.g. Fe2O4 with target_charge=-1
-        # reduces to FeO2 with scaled target -0.5). That fall-back drops the max_sites
-        # speed-up, so warn, and keep the max_sites < -1 size limit on what is searched.
-        scaled_target_charge = _snap_to_integer(scaled_target_charge)
-        if scaled_target_charge.denominator != 1 and comp != self:
+        # target_charge refers to self, so restate it on the composition searched. Multiplying
+        # first keeps an integer result exact for the == check below.
+        scaled_target_charge = target_charge * comp.num_atoms / self.num_atoms
+        if comp != self and scaled_target_charge != round(scaled_target_charge):
+            # search the unreduced composition so the answer does not depend on max_sites
             if max_sites is not None and max_sites < -1 and self.num_atoms > abs(max_sites):
                 raise ValueError(f"Composition {self} cannot accommodate max_sites setting!")
             warnings.warn(
@@ -1138,8 +1107,7 @@ class Composition(collections.abc.Hashable, collections.abc.Mapping, MSONable, S
                 f"max_sites={max_sites} gives no speed-up.",
                 stacklevel=3,
             )
-            comp = self.copy()
-            scaled_target_charge = _snap_to_integer(Fraction(target_charge))
+            comp, scaled_target_charge = self.copy(), target_charge
 
         # Load prior probabilities of oxidation states, used to rank solutions
         if type(self).oxi_prob is None:

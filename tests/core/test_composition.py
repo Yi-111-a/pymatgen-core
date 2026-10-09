@@ -774,13 +774,6 @@ class TestComposition(MatSciTest):
         )
         assert charged[0] == {"Fe": 2.5, "O": -2.0}
 
-        # A float target_charge that scales to a near-integer under reduction still snaps.
-        # Fe2O4 reduced by 2; target -2.0000000001 should land near -1 on FeO2 and snap.
-        comp = Composition("Fe2O4")
-        near = comp.oxi_state_guesses(max_sites=-1, target_charge=-2.0000000001)
-        exact = comp.oxi_state_guesses(max_sites=-1, target_charge=-2)
-        assert near == exact
-
     def test_oxi_state_decoration(self):
         # Basic test: Get compositions where each element is in a single charge state
         decorated = Composition("H2O").add_charges_from_oxi_state_guesses()
