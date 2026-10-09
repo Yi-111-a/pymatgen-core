@@ -722,25 +722,32 @@ class TestComposition(MatSciTest):
                 assert guesses == unreduced
                 assert sum(comp[element] * state for element, state in guesses[0].items()) == target_charge
 
-        # Non-integral scaled target: fall back to the unreduced composition so max_sites
-        # does not change the answer. Fe2O4 with target_charge=-1 can balance unreduced
-        # when Fe^{3+}/Fe^{4+} are allowed (average 3.5 → Fe sum 7, O sum -8); reduced
-        # FeO2 would scale the target to -0.5 and wrongly return () without the fall-back.
+        # Fe36O48 (84 atoms) with target_charge=-4: Fe3O4 would need charge -1/3 and Fe12O16
+        # would need -4/3, but Fe9O12 (21 atoms) has charge exactly -1, so use that.
+        fe36o48 = Composition("Fe36O48")
+        fe9o12_guesses = Composition("Fe9O12").oxi_state_guesses(target_charge=-1)
+        assert fe9o12_guesses != ()
+        for max_sites in (-1, -21, 21, 28):
+            assert fe36o48.oxi_state_guesses(max_sites=max_sites, target_charge=-4) == fe9o12_guesses
+
+        # With 70 sites, the largest formula that fits is Fe27O36 (63 atoms), charge -3
+        fe27o36_guesses = Composition("Fe27O36").oxi_state_guesses(target_charge=-3)
+        assert fe36o48.oxi_state_guesses(max_sites=70, target_charge=-4) == fe27o36_guesses
+
+        # Problem 2: Fe9O12 does not fit in 20 sites, so raise instead of searching all 84 atoms
+        for max_sites in (20, -20):
+            with pytest.raises(ValueError, match="The smallest composition that works is Fe9 O12"):
+                fe36o48.oxi_state_guesses(max_sites=max_sites, target_charge=-4)
+
+        # Problem 1: Fe2O4 with target_charge=-1 cannot shrink at all (FeO2 would need -1/2),
+        # so a 3-site limit must raise, and max_sites=-1 searches Fe2O4 itself.
         fe2o4 = Composition("Fe2O4")
         override = {"Fe": [2, 3, 4], "O": [-2]}
-        unreduced_odd = fe2o4.oxi_state_guesses(target_charge=-1, oxi_states_override=override)
-        assert unreduced_odd != ()
-        assert unreduced_odd[0]["Fe"] == 3.5
-        # The fall-back drops the max_sites speed-up, so it warns.
-        for max_sites in (-1, 3, -6):
-            with pytest.warns(UserWarning, match="does not scale to an integer charge"):
-                guesses = fe2o4.oxi_state_guesses(max_sites=max_sites, target_charge=-1, oxi_states_override=override)
-            assert guesses == unreduced_odd
-
-        # max_sites < -1 still bounds the composition actually searched: FeO2 fits in 3
-        # sites, but the fall-back searches Fe2O4 (6 sites), so this must raise.
-        with pytest.raises(ValueError, match="Composition Fe2 O4 cannot accommodate max_sites setting"):
-            fe2o4.oxi_state_guesses(max_sites=-3, target_charge=-1, oxi_states_override=override)
+        guesses = fe2o4.oxi_state_guesses(max_sites=-1, target_charge=-1, oxi_states_override=override)
+        assert guesses[0]["Fe"] == 3.5
+        for max_sites in (3, -3):
+            with pytest.raises(ValueError, match="The smallest composition that works is Fe2 O4"):
+                fe2o4.oxi_state_guesses(max_sites=max_sites, target_charge=-1, oxi_states_override=override)
 
     def test_oxi_state_guesses_target_charge_exact_under_inexact_reduction_ratio(self):
         # A positive max_sites searches `reduced_comp * max(1, int(max_sites / reduced_atoms))`,
